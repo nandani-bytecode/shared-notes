@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
   Download, 
-  ExternalLink, 
   Star, 
   FolderLock, 
   Check, 
@@ -12,25 +11,23 @@ import {
   ChevronRight, 
   ZoomIn, 
   ZoomOut, 
-  RotateCw, 
   Maximize2, 
   Minimize2, 
   Moon, 
   Sun, 
-  Share2, 
   Edit3, 
-  Trash2, 
   Send, 
-  AlertCircle,
-  Video,
-  Link as LinkIcon,
-  Image as ImageIcon,
-  Sparkles,
-  Search
+  Video, 
+  Link as LinkIcon, 
+  Image as ImageIcon, 
+  Sparkles, 
+  BookOpen,
+  Printer
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { Badge } from '../common/Badge';
+import { generatePdfDataUrl } from '../../utils/pdfGenerator';
 
 interface ResourceViewerModalProps {
   resourceId: string | null;
@@ -60,6 +57,7 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
   const [zoomLevel, setZoomLevel] = useState(100);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pdfDisplayMode, setPdfDisplayMode] = useState<'embedded-pdf' | 'notes-reader'>('embedded-pdf');
   const [commentInput, setCommentInput] = useState('');
   const [replyInputMap, setReplyInputMap] = useState<Record<string, string>>({});
   const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
@@ -72,6 +70,36 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
   const subject = resource ? getSubject(resource.subjectId) : undefined;
   const personalRef = resource ? getPersonalReferenceForResource(resource.id) : undefined;
   const comments = resource ? getResourceComments(resource.id) : [];
+
+  // Generate authentic in-site embeddable PDF Data/Blob URL for any document
+  const embeddedPdfUrl = useMemo(() => {
+    if (!resource || resource.type !== 'pdf') return null;
+    if (resource.url && resource.url.startsWith('blob:')) {
+      return resource.url;
+    }
+    if (resource.url && resource.url.startsWith('data:application/pdf')) {
+      try {
+        const parts = resource.url.split(',');
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
+        return URL.createObjectURL(new Blob([u8arr], { type: mime }));
+      } catch {
+        return resource.url;
+      }
+    }
+    return generatePdfDataUrl(
+      resource.title,
+      subject?.name || 'Academic Subject',
+      community?.name || 'Study Community',
+      resource.uploaderName,
+      resource.pdfContent || []
+    );
+  }, [resource, subject, community]);
 
   // Sync personal notes when modal opens or reference changes
   useEffect(() => {
@@ -86,6 +114,7 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
   useEffect(() => {
     setCurrentPage(0);
     setZoomLevel(100);
+    setPdfDisplayMode('embedded-pdf');
   }, [resourceId]);
 
   if (!resource) return null;
@@ -209,23 +238,30 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
               <Star className={`w-4 h-4 ${isStarred ? 'fill-amber-500' : ''}`} />
             </button>
 
-            {/* Download */}
-            <a
-              href={resource.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              download={resource.title}
+            {/* Print In-App */}
+            <button
+              onClick={() => window.print()}
               className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
-              title="Download or view raw file"
+              title="Print study material"
+            >
+              <Printer className="w-4 h-4" />
+            </button>
+
+            {/* Direct File Download */}
+            <a
+              href={embeddedPdfUrl || resource.url}
+              download={resource.title.endsWith('.pdf') ? resource.title : `${resource.title}.pdf`}
+              className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
+              title="Download file directly"
             >
               <Download className="w-4 h-4" />
             </a>
 
-            {/* Fullscreen */}
+            {/* Fullscreen inside site */}
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
               className="hidden sm:block p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
-              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              title={isFullscreen ? "Exit Fullscreen" : "Fullscreen in site"}
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
@@ -249,97 +285,140 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
             
             {/* Viewer Controls Toolbar (for PDF and reader) */}
             {resource.type === 'pdf' && (
-              <div className="px-4 py-2 bg-white/90 backdrop-blur-xs border-b border-slate-200 flex items-center justify-between text-xs text-slate-600">
-                <div className="flex items-center gap-2">
+              <div className="px-4 py-2 bg-white/95 backdrop-blur-xs border-b border-slate-200 flex items-center justify-between text-xs text-slate-600 gap-2 flex-wrap">
+                {/* On-Site View Mode Selector */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl">
                   <button
-                    onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-                    disabled={currentPage === 0}
-                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Previous Page"
+                    onClick={() => setPdfDisplayMode('embedded-pdf')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      pdfDisplayMode === 'embedded-pdf'
+                        ? 'bg-white text-blue-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>In-App PDF View</span>
                   </button>
-                  <span className="font-semibold text-slate-800">
-                    Page {currentPage + 1} of {totalPages}
-                  </span>
                   <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
-                    disabled={currentPage === totalPages - 1}
-                    className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    title="Next Page"
+                    onClick={() => setPdfDisplayMode('notes-reader')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      pdfDisplayMode === 'notes-reader'
+                        ? 'bg-white text-blue-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Study Notes View</span>
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setZoomLevel(z => Math.max(70, z - 15))}
-                    className="p-1 rounded hover:bg-slate-100"
-                    title="Zoom Out"
-                  >
-                    <ZoomOut className="w-4 h-4" />
-                  </button>
-                  <span className="font-mono text-[11px] w-12 text-center">{zoomLevel}%</span>
-                  <button
-                    onClick={() => setZoomLevel(z => Math.min(160, z + 15))}
-                    className="p-1 rounded hover:bg-slate-100"
-                    title="Zoom In"
-                  >
-                    <ZoomIn className="w-4 h-4" />
-                  </button>
-                  <div className="h-4 w-px bg-slate-200 mx-1" />
-                  <button
-                    onClick={() => setIsDarkMode(!isDarkMode)}
-                    className="p-1 rounded hover:bg-slate-100 text-slate-600"
-                    title={isDarkMode ? "Light Paper Mode" : "Dark Reader Mode"}
-                  >
-                    {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4" />}
-                  </button>
-                </div>
+                {pdfDisplayMode === 'notes-reader' ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                      disabled={currentPage === 0}
+                      className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Previous Page"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="font-semibold text-slate-800">
+                      Page {currentPage + 1} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={currentPage === totalPages - 1}
+                      className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Next Page"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+
+                    <div className="h-4 w-px bg-slate-200 mx-1" />
+
+                    <button
+                      onClick={() => setZoomLevel(z => Math.max(70, z - 15))}
+                      className="p-1 rounded hover:bg-slate-100"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut className="w-4 h-4" />
+                    </button>
+                    <span className="font-mono text-[11px] w-10 text-center">{zoomLevel}%</span>
+                    <button
+                      onClick={() => setZoomLevel(z => Math.min(160, z + 15))}
+                      className="p-1 rounded hover:bg-slate-100"
+                      title="Zoom In"
+                    >
+                      <ZoomIn className="w-4 h-4" />
+                    </button>
+                    <div className="h-4 w-px bg-slate-200 mx-1" />
+                    <button
+                      onClick={() => setIsDarkMode(!isDarkMode)}
+                      className="p-1 rounded hover:bg-slate-100 text-slate-600"
+                      title={isDarkMode ? "Light Paper Mode" : "Dark Reader Mode"}
+                    >
+                      {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4" />}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-medium">Direct In-Site PDF Renderer</span>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Document Render Canvas */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex items-start justify-center">
+            <div className="flex-1 overflow-y-auto p-2 sm:p-4 flex items-center justify-center bg-slate-100">
               {resource.type === 'pdf' && (
-                <div 
-                  className={`w-full max-w-3xl transition-all shadow-xl rounded-xl p-8 sm:p-12 border ${
-                    isDarkMode 
-                      ? 'bg-slate-900 text-slate-200 border-slate-800' 
-                      : 'bg-white text-slate-800 border-slate-200'
-                  }`}
-                  style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
-                >
-                  {/* Realistic Academic PDF Header */}
-                  <div className="border-b pb-4 mb-6 flex items-center justify-between border-slate-200/60 text-xs text-slate-400">
-                    <span className="font-semibold uppercase tracking-wider text-blue-600">
-                      StudySpace Academic Archive • {community?.name}
-                    </span>
-                    <span>Document Page {currentPage + 1}</span>
+                pdfDisplayMode === 'embedded-pdf' && embeddedPdfUrl ? (
+                  <div className="w-full h-full min-h-[580px] bg-white rounded-xl shadow-md overflow-hidden border border-slate-300 flex flex-col">
+                    <iframe
+                      src={`${embeddedPdfUrl}#toolbar=1&navpanes=0`}
+                      className="w-full flex-1 border-0 rounded-xl"
+                      title={resource.title}
+                    />
                   </div>
+                ) : (
+                  <div 
+                    className={`w-full max-w-3xl transition-all shadow-xl rounded-xl p-8 sm:p-12 border my-4 ${
+                      isDarkMode 
+                        ? 'bg-slate-900 text-slate-200 border-slate-800' 
+                        : 'bg-white text-slate-800 border-slate-200'
+                    }`}
+                    style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
+                  >
+                    {/* Realistic Academic PDF Header */}
+                    <div className="border-b pb-4 mb-6 flex items-center justify-between border-slate-200/60 text-xs text-slate-400">
+                      <span className="font-semibold uppercase tracking-wider text-blue-600">
+                        StudySpace Academic Archive • {community?.name}
+                      </span>
+                      <span>Document Page {currentPage + 1}</span>
+                    </div>
 
-                  {/* PDF Markdown / Latex Content */}
-                  <div className="prose max-w-none text-sm leading-relaxed space-y-4">
-                    {resource.pdfContent && resource.pdfContent[currentPage] ? (
-                      <div className="whitespace-pre-wrap font-sans">
-                        {resource.pdfContent[currentPage]}
-                      </div>
-                    ) : (
-                      <div className="py-12 text-center text-slate-400">
-                        <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                        <p className="font-semibold">Lecture Notes Preview</p>
-                        <p className="text-xs mt-1">{resource.description}</p>
-                      </div>
-                    )}
-                  </div>
+                    {/* PDF Markdown / Latex Content */}
+                    <div className="prose max-w-none text-sm leading-relaxed space-y-4">
+                      {resource.pdfContent && resource.pdfContent[currentPage] ? (
+                        <div className="whitespace-pre-wrap font-sans">
+                          {resource.pdfContent[currentPage]}
+                        </div>
+                      ) : (
+                        <div className="py-12 text-center text-slate-400">
+                          <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                          <p className="font-semibold">Lecture Notes Preview</p>
+                          <p className="text-xs mt-1">{resource.description}</p>
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Watermark / Page footer */}
-                  <div className="mt-12 pt-4 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
-                    <span>{resource.title}</span>
-                    <span>Verified Study Material</span>
+                    {/* Watermark / Page footer */}
+                    <div className="mt-12 pt-4 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
+                      <span>{resource.title}</span>
+                      <span>Verified Study Material</span>
+                    </div>
                   </div>
-                </div>
+                )
               )}
 
               {resource.type === 'video' && (
@@ -357,15 +436,6 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
                       <Video className="w-16 h-16 mx-auto mb-4 text-red-500" />
                       <h3 className="text-lg font-bold mb-2">{resource.title}</h3>
                       <p className="text-xs text-slate-400 mb-6 max-w-md mx-auto">{resource.description}</p>
-                      <a
-                        href={resource.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-xl shadow-lg transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        <span>Watch on YouTube</span>
-                      </a>
                     </div>
                   )}
                 </div>
@@ -388,21 +458,13 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
               {resource.type === 'link' && (
                 <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-slate-200 p-8 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-4">
-                    <ExternalLink className="w-8 h-8" />
+                    <LinkIcon className="w-8 h-8" />
                   </div>
                   <h3 className="text-lg font-bold text-slate-900 mb-2">{resource.title}</h3>
                   <p className="text-xs text-slate-600 max-w-md mx-auto mb-6 leading-relaxed">
                     {resource.description}
                   </p>
-                  <a
-                    href={resource.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-blue-500/20 transition-all"
-                  >
-                    <span>Open External Resource Link</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                  <p className="text-[11px] text-slate-400">External Resource URL: {resource.url}</p>
                 </div>
               )}
             </div>
@@ -453,8 +515,6 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
             {/* Tab 1: Discussion Thread */}
             {activeTab === 'discussion' && (
               <div className="flex-1 flex flex-col min-h-0">
-                
-                {/* Sorting header */}
                 <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500 bg-slate-50/50">
                   <span>Questions & Answers</span>
                   <div className="flex items-center gap-1">
@@ -474,13 +534,12 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
                   </div>
                 </div>
 
-                {/* Comments List */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 divide-y divide-slate-100">
                   {sortedComments.length === 0 ? (
                     <div className="py-12 text-center text-slate-400">
                       <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
                       <p className="text-xs font-medium">No questions asked yet</p>
-                      <p className="text-[11px] mt-1">Be the first to start a study discussion on this resource!</p>
+                      <p className="text-[11px] mt-1">Ask questions right here while viewing this PDF!</p>
                     </div>
                   ) : (
                     sortedComments.map(c => {
@@ -506,7 +565,6 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
                                 {c.content}
                               </p>
 
-                              {/* Comment Actions */}
                               <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400">
                                 <button
                                   onClick={() => setActiveReplyId(activeReplyId === c.id ? null : c.id)}
@@ -525,7 +583,6 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
                                 )}
                               </div>
 
-                              {/* Nested Replies */}
                               {c.replies && c.replies.length > 0 && (
                                 <div className="mt-2.5 pl-3 border-l-2 border-slate-100 space-y-2">
                                   {c.replies.map(rep => (
@@ -553,7 +610,6 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
                                 </div>
                               )}
 
-                              {/* Reply Input Box */}
                               {activeReplyId === c.id && (
                                 <div className="mt-2 flex items-center gap-1.5">
                                   <input
@@ -585,13 +641,12 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
                   )}
                 </div>
 
-                {/* Add Comment Input Footer */}
                 <form onSubmit={handleAddComment} className="p-3 border-t border-slate-200 bg-slate-50 flex items-center gap-2">
                   <input
                     type="text"
                     value={commentInput}
                     onChange={(e) => setCommentInput(e.target.value)}
-                    placeholder="Ask a question or discuss this page..."
+                    placeholder="Ask a question about this page..."
                     className="flex-1 text-xs bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
                   />
                   <button
@@ -692,11 +747,10 @@ export const ResourceViewerModal: React.FC<ResourceViewerModalProps> = ({ resour
                   </div>
                 </div>
 
-                {/* Architectural Rule Info */}
                 <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-100 text-[11px] text-blue-900 leading-relaxed">
                   <span className="font-semibold block mb-0.5">Reference Architecture:</span>
                   Unique Resource ID: <code className="bg-blue-100 px-1 py-0.2 rounded font-mono text-[10px]">{resource.id}</code>. 
-                  Adding this to your personal drive creates a personal reference without file duplication.
+                  Viewing directly in StudySpace. Adding this creates a personal reference without file duplication.
                 </div>
               </div>
             )}

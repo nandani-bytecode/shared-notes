@@ -42,10 +42,28 @@ interface DataContextType {
   workspaceCommunityFilter: string; // 'all' or communityId
   setWorkspaceCommunityFilter: (commId: string) => void;
 
-  // Active Resource Viewer Modal State
+  // Global Modals State & Triggers
   activeViewerResourceId: string | null;
   openResourceViewer: (resourceId: string) => void;
   closeResourceViewer: () => void;
+
+  isCreateCommunityOpen: boolean;
+  openCreateCommunity: () => void;
+  closeCreateCommunity: () => void;
+
+  isJoinCommunityOpen: boolean;
+  openJoinCommunity: () => void;
+  closeJoinCommunity: () => void;
+
+  isUploadResourceOpen: boolean;
+  uploadTargetCommunityId?: string;
+  uploadTargetSubjectId?: string;
+  openUploadResource: (communityId?: string, subjectId?: string) => void;
+  closeUploadResource: () => void;
+
+  isCreateFolderOpen: boolean;
+  openCreateFolder: () => void;
+  closeCreateFolder: () => void;
 
   // Personal Workspace Operations (THE CORE ARCHITECTURAL RULE)
   addToWorkspace: (resourceId: string, folderId?: string | null) => PersonalReference;
@@ -64,8 +82,19 @@ interface DataContextType {
   deletePersonalFolder: (folderId: string) => void;
   renamePersonalFolder: (folderId: string, newName: string) => void;
 
+  // Subject Operations
+  addSubject: (data: { code: string; name: string; color?: string; description?: string }) => Subject;
+
   // Community Operations
-  createCommunity: (data: { name: string; code: string; description: string; category: string; subjects: string[] }) => Community;
+  createCommunity: (data: { 
+    name: string; 
+    code: string; 
+    description: string; 
+    category: string; 
+    subjects: string[];
+    avatar?: string;
+    bannerGradient?: string;
+  }) => Community;
   joinCommunityWithCode: (code: string) => { success: boolean; message: string; community?: Community };
   leaveCommunity: (communityId: string) => void;
   createAnnouncement: (communityId: string, title: string, content: string, pinned?: boolean) => Announcement;
@@ -99,15 +128,16 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
-  COMMUNITIES: 'studyspace_communities_v1',
-  RESOURCES: 'studyspace_resources_v1',
-  FOLDERS: 'studyspace_folders_v1',
-  REFERENCES: 'studyspace_references_v1',
-  COMMENTS: 'studyspace_comments_v1',
-  ANNOUNCEMENTS: 'studyspace_announcements_v1',
-  MEMBERS: 'studyspace_members_v1',
-  ORG_MODE: 'studyspace_org_mode_v1',
-  VIEW_MODE: 'studyspace_view_mode_v1',
+  COMMUNITIES: 'studyspace_communities_v2',
+  SUBJECTS: 'studyspace_subjects_v2',
+  RESOURCES: 'studyspace_resources_v2',
+  FOLDERS: 'studyspace_folders_v2',
+  REFERENCES: 'studyspace_references_v2',
+  COMMENTS: 'studyspace_comments_v2',
+  ANNOUNCEMENTS: 'studyspace_announcements_v2',
+  MEMBERS: 'studyspace_members_v2',
+  ORG_MODE: 'studyspace_org_mode_v2',
+  VIEW_MODE: 'studyspace_view_mode_v2',
 };
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -124,7 +154,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
 
-  const [subjects] = useState<Subject[]>(INITIAL_SUBJECTS);
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
+      return stored ? JSON.parse(stored) : INITIAL_SUBJECTS;
+    } catch {
+      return INITIAL_SUBJECTS;
+    }
+  });
 
   const [resources, setResources] = useState<Resource[]>(() => {
     try {
@@ -189,12 +226,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [workspaceCommunityFilter, setWorkspaceCommunityFilter] = useState<string>('all');
+  
+  // Global Modals State
   const [activeViewerResourceId, setActiveViewerResourceId] = useState<string | null>(null);
+  const [isCreateCommunityOpen, setIsCreateCommunityOpen] = useState(false);
+  const [isJoinCommunityOpen, setIsJoinCommunityOpen] = useState(false);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [isUploadResourceOpen, setIsUploadResourceOpen] = useState(false);
+  const [uploadTargetCommunityId, setUploadTargetCommunityId] = useState<string | undefined>(undefined);
+  const [uploadTargetSubjectId, setUploadTargetSubjectId] = useState<string | undefined>(undefined);
 
   // Sync to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.COMMUNITIES, JSON.stringify(communities));
   }, [communities]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
+  }, [subjects]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.RESOURCES, JSON.stringify(resources));
@@ -243,6 +292,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const closeResourceViewer = () => {
     setActiveViewerResourceId(null);
+  };
+
+  const openCreateCommunity = () => setIsCreateCommunityOpen(true);
+  const closeCreateCommunity = () => setIsCreateCommunityOpen(false);
+
+  const openJoinCommunity = () => setIsJoinCommunityOpen(true);
+  const closeJoinCommunity = () => setIsJoinCommunityOpen(false);
+
+  const openCreateFolder = () => setIsCreateFolderOpen(true);
+  const closeCreateFolder = () => setIsCreateFolderOpen(false);
+
+  const openUploadResource = (commId?: string, subjId?: string) => {
+    setUploadTargetCommunityId(commId);
+    setUploadTargetSubjectId(subjId);
+    setIsUploadResourceOpen(true);
+  };
+  const closeUploadResource = () => {
+    setIsUploadResourceOpen(false);
+    setUploadTargetCommunityId(undefined);
+    setUploadTargetSubjectId(undefined);
   };
 
   // Helper getters
@@ -328,8 +397,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newRef;
   };
 
-  // Removing from workspace removes ONLY the user's personal reference!
-  // The community resource remains untouched!
   const removeFromWorkspace = (resourceId: string) => {
     setPersonalReferences(prev =>
       prev.filter(ref => !(ref.resourceId === resourceId && ref.userId === currentUserId))
@@ -340,8 +407,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPersonalReferences(prev => prev.filter(ref => ref.id !== referenceId));
   };
 
-  // Renaming personal reference modifies ONLY personalName!
-  // Original resource.title remains 100% unchanged!
   const renamePersonalReference = (referenceId: string, newPersonalName: string) => {
     if (!newPersonalName.trim()) return;
     setPersonalReferences(prev =>
@@ -349,8 +414,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  // Moving personal reference to another folder affects ONLY personalFolderId!
-  // Original community resource structure remains unchanged!
   const movePersonalReference = (referenceId: string, newFolderId: string | null) => {
     setPersonalReferences(prev =>
       prev.map(ref => ref.id === referenceId ? { ...ref, personalFolderId: newFolderId } : ref)
@@ -370,7 +433,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const toggleStar = (referenceIdOrResourceId: string) => {
-    // Check if it's already a reference ID
     const refById = personalReferences.find(r => r.id === referenceIdOrResourceId && r.userId === currentUserId);
     if (refById) {
       setPersonalReferences(prev =>
@@ -379,7 +441,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // Check if it's a resource ID
     const refByResId = personalReferences.find(r => r.resourceId === referenceIdOrResourceId && r.userId === currentUserId);
     if (refByResId) {
       setPersonalReferences(prev =>
@@ -388,7 +449,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    // If not in workspace, add it and star it
     const newRef = addToWorkspace(referenceIdOrResourceId);
     setPersonalReferences(prev =>
       prev.map(r => r.id === newRef.id ? { ...r, starred: true } : r)
@@ -422,9 +482,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deletePersonalFolder = (folderId: string) => {
-    // Delete folder
     setPersonalFolders(prev => prev.filter(f => f.id !== folderId));
-    // Move any resources in this folder back to root of workspace
     setPersonalReferences(prev =>
       prev.map(ref => ref.personalFolderId === folderId ? { ...ref, personalFolderId: null } : ref)
     );
@@ -437,30 +495,58 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  // Subject Operations
+  const addSubject = (data: { code: string; name: string; color?: string; description?: string }): Subject => {
+    const colors = ['blue', 'emerald', 'amber', 'purple', 'rose', 'indigo', 'cyan'];
+    const newSubject: Subject = {
+      id: `subj-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      code: data.code.trim().toUpperCase(),
+      name: data.name.trim(),
+      color: data.color || colors[Math.floor(Math.random() * colors.length)],
+      description: data.description?.trim() || `${data.name} syllabus, notes and study materials.`,
+      icon: 'BookOpen',
+    };
+    setSubjects(prev => [...prev, newSubject]);
+    return newSubject;
+  };
+
   // Community Operations
   const createCommunity = (data: { 
     name: string; 
     code: string; 
     description: string; 
     category: string; 
-    subjects: string[] 
+    subjects: string[];
+    avatar?: string;
+    bannerGradient?: string;
   }): Community => {
     const gradients = [
       'from-blue-600 to-indigo-800',
       'from-emerald-600 to-teal-800',
       'from-purple-600 to-pink-800',
       'from-amber-600 to-orange-800',
-      'from-cyan-600 to-blue-800'
+      'from-cyan-600 to-blue-800',
+      'from-rose-600 to-red-800'
     ];
+
+    let finalCode = data.code.toUpperCase().trim().replace(/\s+/g, '-');
+    if (!finalCode) {
+      finalCode = `${data.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()}-${new Date().getFullYear()}`;
+    }
+    // Prevent duplicate codes
+    if (communities.some(c => c.code.toUpperCase() === finalCode)) {
+      finalCode = `${finalCode}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+    }
+
     const newComm: Community = {
       id: `comm-${Date.now()}`,
       name: data.name.trim(),
-      code: data.code.toUpperCase().trim(),
-      description: data.description.trim(),
+      code: finalCode,
+      description: data.description?.trim() || 'A collaborative study community for students.',
       category: data.category || 'Classroom',
       membersCount: 1,
-      bannerGradient: gradients[Math.floor(Math.random() * gradients.length)],
-      avatar: '🎓',
+      bannerGradient: data.bannerGradient || gradients[Math.floor(Math.random() * gradients.length)],
+      avatar: data.avatar || '🎓',
       subjects: data.subjects.length > 0 ? data.subjects : ['subj-dsa', 'subj-coa'],
       createdBy: currentUserId,
       createdAt: new Date().toISOString().split('T')[0],
@@ -469,14 +555,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setCommunities(prev => [newComm, ...prev]);
 
-    // Add current user as admin member
+    // Immediately add current user as admin member
     const newMember: CommunityMember = {
       id: `mem-${Date.now()}`,
       communityId: newComm.id,
       userId: currentUserId,
       name: user?.name || 'Student',
       email: user?.email || 'student@college.edu',
-      avatar: user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      avatar: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       role: 'admin',
       joinedAt: new Date().toISOString(),
     };
@@ -505,7 +591,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userId: currentUserId,
       name: user?.name || 'Student',
       email: user?.email || 'student@college.edu',
-      avatar: user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      avatar: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       role: 'member',
       joinedAt: new Date().toISOString(),
     };
@@ -539,7 +625,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       title: title.trim(),
       content: content.trim(),
       authorName: user?.name || 'Admin',
-      authorAvatar: user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      authorAvatar: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       authorRole: 'Community Admin',
       createdAt: new Date().toISOString(),
       pinned,
@@ -571,7 +657,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subjectId: data.subjectId,
       uploaderId: currentUserId,
       uploaderName: user?.name || 'Student',
-      uploaderAvatar: user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      uploaderAvatar: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       createdAt: new Date().toISOString().split('T')[0],
       viewsCount: 1,
       pagesCount: data.type === 'pdf' ? (data.pdfContent?.length || 12) : undefined,
@@ -591,7 +677,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       resourceId,
       userId: currentUserId,
       userName: user?.name || 'Student',
-      userAvatar: user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      userAvatar: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       content: content.trim(),
       createdAt: new Date().toISOString(),
       replies: [],
@@ -606,7 +692,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       commentId,
       userId: currentUserId,
       userName: user?.name || 'Student',
-      userAvatar: user?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      userAvatar: user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       content: content.trim(),
       createdAt: new Date().toISOString(),
     };
@@ -623,6 +709,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resetToDemoData = () => {
     localStorage.clear();
     setCommunities(INITIAL_COMMUNITIES);
+    setSubjects(INITIAL_SUBJECTS);
     setResources(INITIAL_RESOURCES);
     setPersonalFolders(INITIAL_PERSONAL_FOLDERS);
     setPersonalReferences(INITIAL_PERSONAL_REFERENCES);
@@ -655,6 +742,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         activeViewerResourceId,
         openResourceViewer,
         closeResourceViewer,
+        isCreateCommunityOpen,
+        openCreateCommunity,
+        closeCreateCommunity,
+        isJoinCommunityOpen,
+        openJoinCommunity,
+        closeJoinCommunity,
+        isCreateFolderOpen,
+        openCreateFolder,
+        closeCreateFolder,
+        isUploadResourceOpen,
+        uploadTargetCommunityId,
+        uploadTargetSubjectId,
+        openUploadResource,
+        closeUploadResource,
         addToWorkspace,
         removeFromWorkspace,
         removeReferenceById,
@@ -668,6 +769,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createPersonalFolder,
         deletePersonalFolder,
         renamePersonalFolder,
+        addSubject,
         createCommunity,
         joinCommunityWithCode,
         leaveCommunity,

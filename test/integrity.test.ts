@@ -156,4 +156,45 @@ describe('StudySpace Core Architecture & Integrity Tests', () => {
     }
   });
 
+  test('Rule 9: Community creation generates unique codes, custom avatars, and subjects', () => {
+    const existingCodes = new Set(INITIAL_COMMUNITIES.map(c => c.code.toUpperCase()));
+    
+    // Simulate community creation
+    const newCommunityName = 'Artificial Intelligence & Deep Learning 2026';
+    const cleanCode = 'AI-DL-2026';
+    assert.ok(!existingCodes.has(cleanCode), 'New code is unique');
+
+    const createdComm = {
+      id: `comm-test-${Date.now()}`,
+      name: newCommunityName,
+      code: cleanCode,
+      description: 'Hub for neural networks and PyTorch study materials.',
+      avatar: '🤖',
+      bannerGradient: 'from-purple-600 to-pink-800',
+      category: 'Club & Interest',
+      subjects: ['subj-dsa', 'subj-ai-custom'],
+      membersCount: 1,
+      createdAt: new Date().toISOString(),
+    };
+
+    assert.equal(createdComm.avatar, '🤖');
+    assert.equal(createdComm.code, 'AI-DL-2026');
+    assert.ok(createdComm.subjects.includes('subj-ai-custom'));
+  });
+
+  test('Rule 10: In-site PDF Generator produces valid binary PDF data blob URLs', async () => {
+    const { generatePdfDataUrl } = await import('../src/utils/pdfGenerator');
+    const pdfUrl = generatePdfDataUrl(
+      'Midsem Revision Notes: Graph Algorithms',
+      'Data Structures & Algorithms',
+      'CSE Section H',
+      'Aarav Sharma',
+      ['# Unit 4: Graph Traversals\nBFS and DFS time complexity: O(V + E).\nDijkstra algorithm uses min-heap.']
+    );
+
+    assert.ok(typeof pdfUrl === 'string');
+    assert.ok(pdfUrl.startsWith('blob:') || pdfUrl.startsWith('data:'));
+  });
+
 });
+

@@ -33,7 +33,9 @@ export const DashboardPage: React.FC = () => {
     subjects, 
     comments, 
     openResourceViewer, 
-    addToWorkspace 
+    addToWorkspace,
+    openCreateCommunity,
+    openJoinCommunity
   } = useData();
 
   // 1. Continue Studying: Recently accessed personal references
@@ -308,9 +310,24 @@ export const DashboardPage: React.FC = () => {
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                 My Communities
               </h3>
-              <Link to="/communities" className="text-xs text-blue-600 font-semibold">
-                Explore
-              </Link>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={openCreateCommunity}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-0.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create</span>
+                </button>
+                <button
+                  onClick={openJoinCommunity}
+                  className="text-xs text-slate-500 hover:text-slate-800 font-medium"
+                >
+                  Join
+                </button>
+                <Link to="/communities" className="text-xs text-slate-400 hover:text-slate-600 font-medium">
+                  All
+                </Link>
+              </div>
             </div>
             <div className="space-y-2">
               {userCommunities.map(comm => (

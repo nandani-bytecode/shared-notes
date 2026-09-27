@@ -15,17 +15,19 @@ import {
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { Badge } from '../components/common/Badge';
-import { JoinCommunityModal } from '../components/communities/JoinCommunityModal';
-import { CreateCommunityModal } from '../components/communities/CreateCommunityModal';
 
 export const CommunitiesPage: React.FC = () => {
-  const { communities, userCommunities, subjects } = useData();
+  const { 
+    communities, 
+    userCommunities, 
+    subjects, 
+    openCreateCommunity, 
+    openJoinCommunity 
+  } = useData();
   const { user } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [joinModalOpen, setJoinModalOpen] = useState(false);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const categories = ['All', 'Classroom', 'Club & Interest', 'Career & Placement', 'Exam Archive'];
 
@@ -58,7 +60,7 @@ export const CommunitiesPage: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setJoinModalOpen(true)}
+            onClick={openJoinCommunity}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-colors shadow-2xs"
           >
             <KeyRound className="w-4 h-4 text-blue-600" />
@@ -66,7 +68,7 @@ export const CommunitiesPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setCreateModalOpen(true)}
+            onClick={openCreateCommunity}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs shadow-blue-500/20 transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -178,7 +180,7 @@ export const CommunitiesPage: React.FC = () => {
                     </Link>
                   ) : (
                     <button
-                      onClick={() => setJoinModalOpen(true)}
+                      onClick={openJoinCommunity}
                       className="px-3 py-1 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 shadow-2xs"
                     >
                       Join
@@ -190,17 +192,6 @@ export const CommunitiesPage: React.FC = () => {
           );
         })}
       </div>
-
-      <JoinCommunityModal
-        isOpen={joinModalOpen}
-        onClose={() => setJoinModalOpen(false)}
-      />
-
-      <CreateCommunityModal
-        isOpen={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-      />
-
     </div>
   );
 };

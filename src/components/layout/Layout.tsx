@@ -7,15 +7,27 @@ import { ResourceViewerModal } from '../viewer/ResourceViewerModal';
 import { CreateFolderModal } from '../workspace/CreateFolderModal';
 import { JoinCommunityModal } from '../communities/JoinCommunityModal';
 import { CreateCommunityModal } from '../communities/CreateCommunityModal';
+import { UploadResourceModal } from '../communities/UploadResourceModal';
 import { useData } from '../../context/DataContext';
 
 export const Layout: React.FC = () => {
-  const { activeViewerResourceId, closeResourceViewer } = useData();
+  const { 
+    activeViewerResourceId, 
+    closeResourceViewer,
+    isCreateCommunityOpen,
+    openCreateCommunity,
+    closeCreateCommunity,
+    isJoinCommunityOpen,
+    openJoinCommunity,
+    closeJoinCommunity,
+    isCreateFolderOpen,
+    openCreateFolder,
+    closeCreateFolder,
+    isUploadResourceOpen,
+    closeUploadResource
+  } = useData();
 
   const [searchOpen, setSearchOpen] = useState(false);
-  const [createFolderOpen, setCreateFolderOpen] = useState(false);
-  const [joinCommunityOpen, setJoinCommunityOpen] = useState(false);
-  const [createCommunityOpen, setCreateCommunityOpen] = useState(false);
 
   // Global keyboard shortcut for search (Cmd+K / Ctrl+K)
   React.useEffect(() => {
@@ -34,16 +46,16 @@ export const Layout: React.FC = () => {
       {/* Top Navbar */}
       <Navbar
         onOpenSearch={() => setSearchOpen(true)}
-        onOpenJoinCommunity={() => setJoinCommunityOpen(true)}
-        onOpenCreateCommunity={() => setCreateCommunityOpen(true)}
+        onOpenJoinCommunity={openJoinCommunity}
+        onOpenCreateCommunity={openCreateCommunity}
       />
 
       <div className="flex-1 flex max-w-7xl w-full mx-auto">
         {/* Left Drive / Workspace Sidebar */}
         <Sidebar
-          onOpenCreateFolder={() => setCreateFolderOpen(true)}
-          onOpenJoinCommunity={() => setJoinCommunityOpen(true)}
-          onOpenCreateCommunity={() => setCreateCommunityOpen(true)}
+          onOpenCreateFolder={openCreateFolder}
+          onOpenJoinCommunity={openJoinCommunity}
+          onOpenCreateCommunity={openCreateCommunity}
         />
 
         {/* Dynamic Route Content */}
@@ -64,18 +76,23 @@ export const Layout: React.FC = () => {
       />
 
       <CreateFolderModal
-        isOpen={createFolderOpen}
-        onClose={() => setCreateFolderOpen(false)}
+        isOpen={isCreateFolderOpen}
+        onClose={closeCreateFolder}
       />
 
       <JoinCommunityModal
-        isOpen={joinCommunityOpen}
-        onClose={() => setJoinCommunityOpen(false)}
+        isOpen={isJoinCommunityOpen}
+        onClose={closeJoinCommunity}
       />
 
       <CreateCommunityModal
-        isOpen={createCommunityOpen}
-        onClose={() => setCreateCommunityOpen(false)}
+        isOpen={isCreateCommunityOpen}
+        onClose={closeCreateCommunity}
+      />
+
+      <UploadResourceModal
+        isOpen={isUploadResourceOpen}
+        onClose={closeUploadResource}
       />
     </div>
   );

@@ -17,27 +17,41 @@ import { useData } from '../../context/DataContext';
 interface UploadResourceModalProps {
   communityId?: string;
   defaultSubjectId?: string;
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
   communityId: initialCommunityId,
   defaultSubjectId,
-  isOpen,
-  onClose,
+  isOpen: propIsOpen,
+  onClose: propOnClose,
 }) => {
-  const { communities, userCommunities, subjects, uploadResource } = useData();
+  const { 
+    isUploadResourceOpen,
+    closeUploadResource,
+    uploadTargetCommunityId,
+    uploadTargetSubjectId,
+    communities, 
+    userCommunities, 
+    subjects, 
+    uploadResource 
+  } = useData();
+
+  const isModalOpen = propIsOpen !== undefined ? propIsOpen : isUploadResourceOpen;
+  const handleModalClose = () => {
+    if (propOnClose) propOnClose();
+    closeUploadResource();
+  };
+
+  const commIdToUse = initialCommunityId || uploadTargetCommunityId || userCommunities[0]?.id || communities[0]?.id || '';
+  const subjIdToUse = defaultSubjectId || uploadTargetSubjectId || subjects[0]?.id || '';
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<ResourceType>('pdf');
-  const [targetCommunityId, setTargetCommunityId] = useState<string>(
-    initialCommunityId || userCommunities[0]?.id || communities[0]?.id || ''
-  );
-  const [targetSubjectId, setTargetSubjectId] = useState<string>(
-    defaultSubjectId || subjects[0]?.id || ''
-  );
+  const [targetCommunityId, setTargetCommunityId] = useState<string>(commIdToUse);
+  const [targetSubjectId, setTargetSubjectId] = useState<string>(subjIdToUse);
   const [linkUrl, setLinkUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -47,7 +61,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
 
-  if (!isOpen) return null;
+  if (!isModalOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -99,7 +113,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
     // Start upload simulation with realistic progress bar
     setIsUploading(true);
     setUploadStatus('uploading');
-    setUploadProgress(15);
+    setUploadProgress(20);
 
     const interval = setInterval(() => {
       setUploadProgress(prev => {
@@ -109,17 +123,26 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
         }
         return prev + 25;
       });
-    }, 150);
+    }, 120);
+
+    let resourceUrl = linkUrl.trim() || 'https://example.com/sample.pdf';
+    if (selectedFile) {
+      try {
+        resourceUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve(URL.createObjectURL(selectedFile));
+          reader.readAsDataURL(selectedFile);
+        });
+      } catch {
+        resourceUrl = URL.createObjectURL(selectedFile);
+      }
+    }
 
     setTimeout(() => {
       clearInterval(interval);
       setUploadProgress(100);
       setUploadStatus('success');
-
-      // Create resource in data layer
-      const resourceUrl = selectedFile 
-        ? URL.createObjectURL(selectedFile) 
-        : linkUrl.trim() || 'https://example.com/sample.pdf';
 
       const fileSize = selectedFile 
         ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB` 
@@ -143,9 +166,9 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
         setTitle('');
         setDescription('');
         setLinkUrl('');
-        onClose();
-      }, 1000);
-    }, 800);
+        handleModalClose();
+      }, 700);
+    }, 600);
   };
 
   return (
@@ -160,7 +183,8 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
             <h3 className="font-bold text-slate-900 text-sm">Upload Study Resource</h3>
           </div>
           <button 
-            onClick={onClose} 
+            type="button"
+            onClick={handleModalClose} 
             disabled={isUploading}
             className="p-1 text-slate-400 hover:text-slate-600 rounded disabled:opacity-30"
           >
@@ -347,7 +371,7 @@ export const UploadResourceModal: React.FC<UploadResourceModalProps> = ({
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleModalClose}
               disabled={isUploading}
               className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-40"
             >
